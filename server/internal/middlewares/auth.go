@@ -2,9 +2,11 @@ package middlewares
 
 import (
 	"errors"
+	"net/http"
 	"shiplabs/schat/internal/pkg/config"
 	"shiplabs/schat/internal/pkg/db"
 	repos "shiplabs/schat/internal/repositories"
+	"shiplabs/schat/pkg/shared"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -21,14 +23,14 @@ var userRepo = repos.NewUserRepo(*db.DB)
 func Auth(ctx *gin.Context) {
 	authT := ctx.GetHeader("Authorization")
 	if authT == "" {
-		ctx.JSON(401, gin.H{"error": "Authorization header required"})
+		shared.ErrorResponse(ctx, http.StatusUnauthorized, ErrCredentialsRequired)
 		ctx.Abort()
 		return
 	}
 
 	jwtToken, err := extractBearerToken(authT)
 	if err != nil {
-		ctx.JSON(401, gin.H{"error": err.Error()})
+		shared.ErrorResponse(ctx, http.StatusUnauthorized, err.Error())
 		ctx.Abort()
 		return
 	}
@@ -41,7 +43,7 @@ func Auth(ctx *gin.Context) {
 	userId := uuid.MustParse(claims.Subject)
 	user, err := userRepo.FindByID(userId)
 	if err != nil {
-		ctx.JSON(401, gin.H{"error": "User not found"})
+		shared.ErrorResponse(ctx, http.StatusUnauthorized, err.Error())
 		ctx.Abort()
 		return
 	}
