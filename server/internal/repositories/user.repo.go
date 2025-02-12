@@ -14,27 +14,27 @@ type UserRepoInterface interface {
 }
 
 type UserRepo struct {
-	db gorm.DB
+	DB gorm.DB
 }
 
 func NewUserRepo(db gorm.DB) UserRepoInterface {
 	return &UserRepo{
-		db: db,
+		DB: db,
 	}
 }
 
 func (u *UserRepo) Create(user *models.User) error {
-	return u.db.Create(user).Error
+	return u.DB.Create(user).Error
 }
 
 func (u *UserRepo) FindByEmail(email string) (*models.User, error) {
 	user := &models.User{}
-	err := u.db.Where("email = ?", email).First(user).Error
+	err := u.DB.Where("email = ?", email).First(user).Error
 	return user, err
 }
 
 func (u *UserRepo) FindByID(id uuid.UUID) (*models.User, error) {
 	user := &models.User{}
-	err := u.db.Where("id = ?", id).First(user).Error
+	err := u.DB.Where("id = ?", id).First(user).Error
 	return user, err
 }
