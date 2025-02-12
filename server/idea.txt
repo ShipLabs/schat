@@ -1,0 +1,15 @@
+//Want to build a simple chat app to demonstrate how to use websockets for personal and group chats
+
+
+//tools needed:
+
+gin, db(pg), gorilla/websockets
+
+
+//process
+
+//users can create account (basic login, logout) - no complex auth implementation
+//user can have email and name and password. email is unique, add userid
+//group can be created (default group max == 10)
+//group will have name(not unique), groupid, createdat
+//member link table (max == 10), groupid, userid, is admin??, iscreator
