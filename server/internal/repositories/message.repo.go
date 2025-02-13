@@ -8,7 +8,7 @@ import (
 )
 
 type PrivateMessageRepoInterface interface {
-	Create(message *models.PrivateMessage) error
+	Create(txn *gorm.DB, message *models.PrivateMessage) error
 	GetChatMessages(chatID uuid.UUID) ([]models.PrivateMessage, error)
 }
 
@@ -31,8 +31,11 @@ func NewPrivateMessageRepo(db gorm.DB) PrivateMessageRepoInterface {
 	}
 }
 
-func (p *privateMessageRepo) Create(message *models.PrivateMessage) error {
-	return p.DB.Create(message).Error
+func (p *privateMessageRepo) Create(txn *gorm.DB, message *models.PrivateMessage) error {
+	if txn != nil {
+		return p.DB.Create(message).Error
+	}
+	return txn.Create(message).Error
 }
 
 func (p *privateMessageRepo) GetChatMessages(chatID uuid.UUID) ([]models.PrivateMessage, error) {
