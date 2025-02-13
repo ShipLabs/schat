@@ -9,8 +9,8 @@ import (
 
 type UserRepoInterface interface {
 	Create(user *models.User) error
-	FindByEmail(email string) (*models.User, error)
-	FindByID(id uuid.UUID) (*models.User, error)
+	FindByEmail(email string) (models.User, error)
+	FindByID(id uuid.UUID) (models.User, error)
 }
 
 type UserRepo struct {
@@ -27,14 +27,14 @@ func (u *UserRepo) Create(user *models.User) error {
 	return u.DB.Create(user).Error
 }
 
-func (u *UserRepo) FindByEmail(email string) (*models.User, error) {
-	user := &models.User{}
-	err := u.DB.Where("email = ?", email).First(user).Error
+func (u *UserRepo) FindByEmail(email string) (models.User, error) {
+	var user models.User
+	err := u.DB.Where("email = ?", email).First(&user).Error
 	return user, err
 }
 
-func (u *UserRepo) FindByID(id uuid.UUID) (*models.User, error) {
-	user := &models.User{}
-	err := u.DB.Where("id = ?", id).First(user).Error
+func (u *UserRepo) FindByID(id uuid.UUID) (models.User, error) {
+	var user models.User
+	err := u.DB.Where("id = ?", id).First(&user).Error
 	return user, err
 }
