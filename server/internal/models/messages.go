@@ -23,10 +23,10 @@ type BaseMessage struct {
 	Content    string       `gorm:"not null" json:"content"`
 }
 
-type Message struct {
+type PrivateMessage struct {
 	BaseMessage
-	ReceiverID uuid.UUID `gorm:"not null;index" json:"receiver_id"`
-	Receiver   User      `gorm:"foreignKey:receiver_id" json:"-"`
+	ChatID uuid.UUID   `gorm:"not null;index" json:"chat_id"`
+	Chat   PrivateChat `gorm:"foreignKey:chat_id" json:"-"`
 }
 
 type GroupMessage struct {
