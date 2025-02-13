@@ -14,6 +14,7 @@ type groupRepo struct {
 type GroupRepoInterface interface {
 	CreateGroup(group *models.Group) error
 	GetUserGroups(userID uuid.UUID) ([]models.Group, error)
+	FindByID(groupID uuid.UUID) (models.Group, error)
 }
 
 func NewGroupRepo(db gorm.DB) GroupRepoInterface {
@@ -30,4 +31,10 @@ func (g *groupRepo) GetUserGroups(userID uuid.UUID) ([]models.Group, error) {
 	var groups []models.Group
 	//TODO
 	return groups, nil
+}
+
+func (g *groupRepo) FindByID(groupID uuid.UUID) (models.Group, error) {
+	var group models.Group
+	err := g.DB.Where("id = ?", groupID).First(group).Error
+	return group, err
 }
