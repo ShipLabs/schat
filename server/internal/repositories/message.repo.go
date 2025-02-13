@@ -48,7 +48,7 @@ func NewGroupMessageRepo(db gorm.DB) GroupMessageRepoInterface {
 }
 
 func (g *groupMessageRepo) Create(message *models.GroupMessage) error {
-	return g.DB.Create(message).Error
+	return g.DB.Create(&message).Error
 }
 
 func (g *groupMessageRepo) GetGroupMessages(groupID uuid.UUID) ([]models.GroupMessage, error) {
