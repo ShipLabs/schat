@@ -12,8 +12,9 @@ type privateChatRepo struct {
 }
 
 type PrivateChatRepoInterface interface {
-	BeginDBTransaction() *gorm.DB
+	BeginDBTx() *gorm.DB
 	CreatePrivateChat(txn *gorm.DB, chat *models.PrivateChat) error
+	FindByID(chatID uuid.UUID) (models.PrivateChat, error)
 	GetUserPrivateChats(userID uuid.UUID) ([]models.PrivateChat, error)
 }
 
@@ -23,12 +24,18 @@ func NewPrivateChatRepo(db gorm.DB) PrivateChatRepoInterface {
 	}
 }
 
-func (p *privateChatRepo) BeginDBTransaction() *gorm.DB {
+func (p *privateChatRepo) BeginDBTx() *gorm.DB {
 	return p.DB.Begin()
 }
 
 func (p *privateChatRepo) CreatePrivateChat(txn *gorm.DB, chat *models.PrivateChat) error {
 	return txn.Create(chat).Error
+}
+
+func (p *privateChatRepo) FindByID(chatID uuid.UUID) (models.PrivateChat, error) {
+	var chat models.PrivateChat
+	err := p.DB.Where("id = ?", chatID).First(&chat).Error
+	return chat, err
 }
 
 func (p *privateChatRepo) GetUserPrivateChats(userID uuid.UUID) ([]models.PrivateChat, error) {
