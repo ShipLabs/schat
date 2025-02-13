@@ -26,5 +26,6 @@ type GroupMember struct {
 	UserID     uuid.UUID `gorm:"primaryKey;type:uuid" json:"user_id"`
 	User       User      `gorm:"foreignKey:user_id" json:"-"`
 	GroupID    uuid.UUID `gorm:"primaryKey;type:uuid" json:"group_id"`
+	Group      Group     `gorm:"foreignKey:group_id" json:"-"`
 	Role       GroupRole `gorm:"not null;default:member" json:"role"`
 }
