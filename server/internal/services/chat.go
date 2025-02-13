@@ -30,7 +30,7 @@ type GroupMessageDto struct {
 }
 
 type chatService struct {
-	userRepo           repos.UserRepo
+	userRepo           repos.UserRepoInterface
 	privateChatRepo    repos.PrivateChatRepoInterface
 	groupRepo          repos.GroupRepoInterface
 	groupMsgRepo       repos.GroupMessageRepoInterface
@@ -44,7 +44,7 @@ type ChatServiceInterface interface {
 }
 
 func NewChatService(
-	userRepo repos.UserRepo,
+	userRepo repos.UserRepoInterface,
 	privateChatRepo repos.PrivateChatRepoInterface,
 	groupRepo repos.GroupRepoInterface,
 	groupMsgRepo repos.GroupMessageRepoInterface,
