@@ -34,12 +34,12 @@ func (p *privateChatRepo) CreatePrivateChat(txn *gorm.DB, chat *models.PrivateCh
 
 func (p *privateChatRepo) FindByID(chatID uuid.UUID) (models.PrivateChat, error) {
 	var chat models.PrivateChat
-	err := p.DB.Where("id = ?", chatID).First(&chat).Error
+	err := p.DB.Where("id=?", chatID).First(&chat).Error
 	return chat, err
 }
 
 func (p *privateChatRepo) GetUserPrivateChats(userID uuid.UUID) ([]models.PrivateChat, error) {
 	var chats []models.PrivateChat
-	err := p.DB.Where("first_member_id = ? OR second_member_id = ?", userID, userID).Find(&chats).Error
+	err := p.DB.Where("first_member_id=? OR second_member_id=?", userID, userID).Find(&chats).Error
 	return chats, err
 }

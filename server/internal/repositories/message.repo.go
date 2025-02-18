@@ -40,7 +40,7 @@ func (p *privateMessageRepo) Create(txn *gorm.DB, message *models.PrivateMessage
 
 func (p *privateMessageRepo) GetChatMessages(chatID uuid.UUID) ([]models.PrivateMessage, error) {
 	var messages []models.PrivateMessage
-	err := p.DB.Where("chat_id = ?", chatID).Find(&messages).Error
+	err := p.DB.Where("chat_id=?", chatID).Find(&messages).Error
 	return messages, err
 }
 
@@ -56,6 +56,6 @@ func (g *groupMessageRepo) Create(message *models.GroupMessage) error {
 
 func (g *groupMessageRepo) GetGroupMessages(groupID uuid.UUID) ([]models.GroupMessage, error) {
 	var messages []models.GroupMessage
-	err := g.DB.Where("group_id = ?", groupID).Find(&messages).Error
+	err := g.DB.Where("group_id=?", groupID).Find(&messages).Error
 	return messages, err
 }

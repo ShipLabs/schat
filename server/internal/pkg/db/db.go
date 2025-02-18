@@ -34,7 +34,8 @@ func Connect() {
 	}
 
 	err = db.AutoMigrate(
-		models.User{},
+		&models.User{}, &models.PrivateChat{}, &models.GroupMessage{},
+		&models.PrivateMessage{}, &models.Group{}, &models.GroupMember{},
 	)
 
 	if err != nil {

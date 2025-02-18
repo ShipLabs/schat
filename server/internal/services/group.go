@@ -80,6 +80,7 @@ func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersI
 		}
 		members = append(members, member)
 	}
+
 	return members
 }
 
@@ -93,18 +94,21 @@ func (g *groupService) AddToGroup(groupID, adminID, newMemberID uuid.UUID) error
 		return err
 	}
 
-	if g.isGroupAdmin(groupID, adminID) {
-		memberShip := models.GroupMember{
-			UserID:  newMemberID,
-			GroupID: groupID,
-			Role:    models.Member,
-		}
-		if err := g.groupRepo.CreateGroupMembership(nil, &[]models.GroupMember{memberShip}); err != nil {
-			return err
-		}
+	if !g.isGroupAdmin(groupID, adminID) {
+		return ErrNotAdmin
 	}
 
-	return ErrNotAdmin
+	memberShip := models.GroupMember{
+		UserID:  newMemberID,
+		GroupID: groupID,
+		Role:    models.Member,
+	}
+
+	if err := g.groupRepo.CreateGroupMembership(nil, &[]models.GroupMember{memberShip}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (g *groupService) RemoveFromGroup(groupID, adminID, memberID uuid.UUID) error {

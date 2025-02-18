@@ -62,13 +62,13 @@ func (g *groupRepo) GetUserGroups(userID uuid.UUID) ([]models.Group, error) {
 
 func (g *groupRepo) FindByID(groupID uuid.UUID) (models.Group, error) {
 	var group models.Group
-	err := g.DB.Where("id = ?", groupID).First(group).Error
+	err := g.DB.Where("id=?", groupID).First(group).Error
 	return group, err
 }
 
 func (g *groupRepo) GetGroupMember(groupID, userID uuid.UUID) (models.GroupMember, error) {
 	var groupMember models.GroupMember
-	err := g.DB.Where("user_id = ? AND group_id = ?", userID, groupID).First(&groupMember).Error
+	err := g.DB.Where("user_id=? AND group_id=?", userID, groupID).First(&groupMember).Error
 	return groupMember, err
 }
 
@@ -81,5 +81,5 @@ func (g *groupRepo) CreateGroupMembership(tx *gorm.DB, membership *[]models.Grou
 }
 
 func (g *groupRepo) RevokeMembership(groupID, userID uuid.UUID) error {
-	return g.DB.Unscoped().Where("user_id = ? AND group_id = ?", userID, groupID).Delete(&models.GroupMember{}).Error
+	return g.DB.Unscoped().Where("user_id=? AND group_id=?", userID, groupID).Delete(&models.GroupMember{}).Error
 }

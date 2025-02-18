@@ -62,6 +62,7 @@ func NewChatService(
 var (
 	ErrUserNotFound = errors.New("user not found")
 	ErrCreatingChat = errors.New("error creating chat")
+	ErrChat404      = errors.New("chat not found")
 )
 
 func (c *chatService) CreatePrivateChat(data CreateChatDto) error {
@@ -100,8 +101,9 @@ func (c *chatService) CreatePrivateChat(data CreateChatDto) error {
 func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
 	_, err := c.privateChatRepo.FindByID(data.ChatID)
 	if err != nil {
-		return err
+		return ErrChat404
 	}
+
 	pchat := models.PrivateMessage{
 		ChatID: data.ChatID,
 		BaseMessage: models.BaseMessage{

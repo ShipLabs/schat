@@ -29,12 +29,12 @@ func (u *UserRepo) Create(user *models.User) error {
 
 func (u *UserRepo) FindByEmail(email string) (models.User, error) {
 	var user models.User
-	err := u.DB.Where("email = ?", email).First(&user).Error
+	err := u.DB.Where("email=?", email).First(&user).Error
 	return user, err
 }
 
 func (u *UserRepo) FindByID(id uuid.UUID) (models.User, error) {
 	var user models.User
-	err := u.DB.Where("id = ?", id).First(&user).Error
+	err := u.DB.Where("id=?", id).First(&user).Error
 	return user, err
 }
