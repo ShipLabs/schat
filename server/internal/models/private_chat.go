@@ -1,6 +1,8 @@
 package models
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -12,4 +14,6 @@ type PrivateChat struct {
 	FirstMember    User      `gorm:"foreignKey:first_member_id" json:"-"`
 	SecondMemberID uuid.UUID `gorm:"not null;index" json:"second_member_id"`
 	SecondMember   User      `gorm:"foreignKey:second_member_id" json:"-"`
+	CreatedAt      time.Time `gorm:"not null" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"not null" json:"updated_at"`
 }

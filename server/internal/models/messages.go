@@ -1,6 +1,8 @@
 package models
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -21,6 +23,8 @@ type BaseMessage struct {
 	Sender     User         `gorm:"foreignKey:sender_id" json:"-"`
 	Type       ValidMsgType `gorm:"not null" json:"type"`
 	Content    string       `gorm:"not null" json:"content"`
+	CreatedAt  time.Time    `gorm:"not null" json:"created_at"`
+	UpdatedAt  time.Time    `gorm:"not null" json:"updated_at"`
 }
 
 type PrivateMessage struct {

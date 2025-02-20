@@ -1,6 +1,8 @@
 package models
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -19,6 +21,8 @@ type Group struct {
 	CreatorID   uuid.UUID `gorm:"not null" json:"creator_id"`
 	Creator     User      `gorm:"foreignKey:creator_id" json:"-"`
 	Description *string   `json:"description"`
+	CreatedAt   time.Time `gorm:"not null" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"not null" json:"updated_at"`
 }
 
 type GroupMember struct {
@@ -28,4 +32,6 @@ type GroupMember struct {
 	GroupID    uuid.UUID `gorm:"primaryKey;type:uuid" json:"group_id"`
 	Group      Group     `gorm:"foreignKey:group_id" json:"-"`
 	Role       GroupRole `gorm:"not null;default:member" json:"role"`
+	CreatedAt  time.Time `gorm:"not null" json:"created_at"`
+	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
 }
