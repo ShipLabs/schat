@@ -1,21 +1,14 @@
 package base
 
 import (
-	repos "shiplabs/schat/internal/repositories"
 	"shiplabs/schat/internal/services"
 )
 
-func (b *base) WithAuthService(userRepo repos.UserRepoInterface) services.AuthServiceInterface {
+func (b *base) WithAuthService() services.AuthServiceInterface {
 	return services.NewAuthService(b.WithUserRepo())
 }
 
-func (b *base) WithPrivateChatService(
-	userRepo repos.UserRepoInterface,
-	privateChatRepo repos.PrivateChatRepoInterface,
-	groupRepo repos.GroupRepoInterface,
-	groupMsgRepo repos.GroupMessageRepoInterface,
-	privateMsgRepo repos.PrivateMessageRepoInterface,
-) services.ChatServiceInterface {
+func (b *base) WithPrivateChatService() services.ChatServiceInterface {
 	return services.NewChatService(
 		b.WithUserRepo(),
 		b.WithPrivateChatRepo(),

@@ -1,12 +1,17 @@
 package base
 
-import "gorm.io/gorm"
+import (
+	"shiplabs/schat/internal/handlers"
+
+	"gorm.io/gorm"
+)
 
 type base struct {
 	db *gorm.DB
 }
 
 type baseHandlers struct {
+	AuthH handlers.AuthHandlerInterface
 }
 
 func New(db *gorm.DB) *base {
@@ -17,6 +22,8 @@ func New(db *gorm.DB) *base {
 
 func (b *base) MountHandlers() baseHandlers {
 	var h baseHandlers
+
+	h.AuthH = b.WithAuthController()
 
 	return h
 }
