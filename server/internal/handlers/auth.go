@@ -13,6 +13,12 @@ type LoginDto struct {
 	Password string `json:"password"`
 }
 
+type SignUpDto struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 type AuthHandlerInterface interface {
 	SignUp(ctx *gin.Context)
 	Login(ctx *gin.Context)
@@ -29,12 +35,12 @@ func NewAuthHandler(authS services.AuthServiceInterface) AuthHandlerInterface {
 }
 
 func (a *authHandler) SignUp(ctx *gin.Context) {
-	var b LoginDto
+	var b SignUpDto
 	if !shared.ParseBody(ctx, &b) {
 		return
 	}
 
-	token, err := a.authService.SignUp(b.Email, b.Password)
+	token, err := a.authService.SignUp(b.Name, b.Email, b.Password)
 	if err != nil {
 		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, err.Error())
 	}

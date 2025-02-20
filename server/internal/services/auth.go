@@ -13,8 +13,8 @@ import (
 )
 
 type AuthServiceInterface interface {
-	Login(email string, password string) (string, error)
-	SignUp(email string, password string) (string, error)
+	Login(email, password string) (string, error)
+	SignUp(name, email, password string) (string, error)
 }
 
 type AuthService struct {
@@ -31,7 +31,7 @@ func NewAuthService(userRepo repos.UserRepoInterface) AuthServiceInterface {
 	}
 }
 
-func (a *AuthService) Login(email string, password string) (string, error) {
+func (a *AuthService) Login(email, password string) (string, error) {
 	user, err := a.UserRepo.FindByEmail(email)
 	if err != nil {
 		return "", err
@@ -44,9 +44,10 @@ func (a *AuthService) Login(email string, password string) (string, error) {
 	return a.signJWT(user.ID)
 }
 
-func (a *AuthService) SignUp(email string, password string) (string, error) {
+func (a *AuthService) SignUp(name, email, password string) (string, error) {
 	user := &models.User{
 		Email:    email,
+		Name:     name,
 		Password: shared.HashData(password),
 	}
 
