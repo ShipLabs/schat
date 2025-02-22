@@ -5,12 +5,17 @@ import (
 	"net/http"
 	"shiplabs/schat/internal/pkg/store"
 	"shiplabs/schat/internal/services"
-	"shiplabs/schat/pkg/shared"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
+
+type WSResponse struct {
+	StatusCode   int    `json:"status_code"`
+	ErrorMessage string `json:"error_msg"`
+	Data         string `json:"data"`
+}
 
 type wsHandler struct {
 	store              store.ConnectionStoreInterface
@@ -39,12 +44,23 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+func (w *wsHandler) handleResponse(conn *websocket.Conn, code int, msg, data string) {
+	resp := WSResponse{
+		StatusCode:   code,
+		ErrorMessage: msg,
+		Data:         data,
+	}
+	if err := conn.WriteJSON(&resp); err != nil {
+		log.Println(err)
+	}
+}
+
 func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
 	userID := uuid.MustParse(ctx.GetString("userID"))
 	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
 		log.Println(err)
-		shared.ErrorResponse(ctx, http.StatusBadRequest, err.Error())
+		w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
 	}
 
 	eConn, err := w.store.GetConn(userID)
@@ -57,25 +73,21 @@ func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
 	if err := eConn.ReadJSON(&message); err != nil {
 		//check unepected connection closure error
 		log.Println(err)
-		shared.ErrorResponse(ctx, http.StatusBadRequest, err.Error())
+		w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
 	}
 
 	if err := w.privateChatService.SendPrivateMsg(message); err != nil {
 		log.Println(err)
-		shared.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
 	}
 
 	rconn, err := w.store.GetConn(message.ReceiverID)
 	if err != nil {
-		log.Println(err)
-		shared.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
+		log.Println("receiver is not online")
+		return
 	}
 
-	//assume text message is default
-	if err := rconn.WriteMessage(websocket.TextMessage, []byte(message.Content)); err != nil {
-		log.Println(err)
-		shared.ErrorResponse(ctx, http.StatusInternalServerError, err.Error())
-	}
+	w.handleResponse(rconn, http.StatusOK, "", message.Content)
 }
 
 func (w *wsHandler) HandleGroupChat(ctx *gin.Context) {
