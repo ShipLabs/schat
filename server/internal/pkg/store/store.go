@@ -8,6 +8,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var WebsocketStore *wsStore
+
 type wsStore struct {
 	data map[uuid.UUID]*websocket.Conn
 	mu   sync.Mutex
@@ -47,6 +49,14 @@ func (s *wsStore) SaveConn(userID uuid.UUID, conn *websocket.Conn) {
 
 func (s *wsStore) DeleteConn(userID uuid.UUID) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	conn, ok := s.data[userID]
+	if ok {
+		conn.Close()
+	}
 	delete(s.data, userID)
-	s.mu.Unlock()
+}
+
+func InitStore() {
+	WebsocketStore = NewWsStore().(*wsStore)
 }

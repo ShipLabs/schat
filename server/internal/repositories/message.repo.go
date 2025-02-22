@@ -32,7 +32,7 @@ func NewPrivateMessageRepo(db gorm.DB) PrivateMessageRepoInterface {
 }
 
 func (p *privateMessageRepo) Create(txn *gorm.DB, message *models.PrivateMessage) error {
-	if txn != nil {
+	if txn == nil {
 		return p.DB.Create(message).Error
 	}
 	return txn.Create(message).Error
