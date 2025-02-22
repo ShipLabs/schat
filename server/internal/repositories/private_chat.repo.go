@@ -14,7 +14,7 @@ type privateChatRepo struct {
 type PrivateChatRepoInterface interface {
 	BeginDBTx() *gorm.DB
 	CreatePrivateChat(txn *gorm.DB, chat *models.PrivateChat) error
-	FindByID(chatID uuid.UUID) (models.PrivateChat, error)
+	FindChat(mem1, mem2 uuid.UUID) (models.PrivateChat, error)
 	GetUserPrivateChats(userID uuid.UUID) ([]models.PrivateChat, error)
 }
 
@@ -32,9 +32,9 @@ func (p *privateChatRepo) CreatePrivateChat(txn *gorm.DB, chat *models.PrivateCh
 	return txn.Create(chat).Error
 }
 
-func (p *privateChatRepo) FindByID(chatID uuid.UUID) (models.PrivateChat, error) {
+func (p *privateChatRepo) FindChat(mem1, mem2 uuid.UUID) (models.PrivateChat, error) {
 	var chat models.PrivateChat
-	err := p.DB.Where("id=?", chatID).First(&chat).Error
+	err := p.DB.Where("(first_member_id = ? AND second_member_id = ?) OR (first_member_id = ? AND second_member_id = ?)", mem1, mem2, mem2, mem1).First(&chat).Error
 	return chat, err
 }
 
