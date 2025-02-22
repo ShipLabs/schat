@@ -4,12 +4,14 @@ import (
 	"shiplabs/schat/api"
 	"shiplabs/schat/internal/pkg/config"
 	"shiplabs/schat/internal/pkg/db"
+	"shiplabs/schat/internal/pkg/store"
 
 	"github.com/gin-gonic/gin"
 )
 
 func init() {
 	config.Load()
+	store.InitStore()
 	db.Connect()
 }
 
