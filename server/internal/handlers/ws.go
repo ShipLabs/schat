@@ -12,31 +12,21 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-//route - middleware - ws handler
-
-//handler upgrades
-// is connection existing? check store (how do I manage connections in say a chat app)
-//any ws headers to pay attention to??
-//get message (data, should be json)
-//call appropriate handler depending on endpoint called
-//how do I handle error???
-//broadcast message to receipient, how do I send feedback to sender? like tick for delivered message??
-
 type wsHandler struct {
 	store              store.ConnectionStoreInterface
 	privateChatService services.ChatServiceInterface
 }
 
-type wsHandlerInterface interface {
-	handlePrivateChat(ctx *gin.Context)
-	handleGroupChat(ctx *gin.Context)
-	handlerGroupCreation(ctx *gin.Context)
+type WsHandlerInterface interface {
+	HandlePrivateChat(ctx *gin.Context)
+	HandleGroupChat(ctx *gin.Context)
+	HandlerGroupCreation(ctx *gin.Context)
 }
 
 func NewWebSocketHandler(
 	store store.ConnectionStoreInterface,
 	pChatService services.ChatServiceInterface,
-) wsHandlerInterface {
+) WsHandlerInterface {
 	return &wsHandler{
 		store:              store,
 		privateChatService: pChatService,
@@ -49,7 +39,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (w *wsHandler) handlePrivateChat(ctx *gin.Context) {
+func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
 	userID := uuid.MustParse(ctx.GetString("userID"))
 	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
@@ -88,13 +78,13 @@ func (w *wsHandler) handlePrivateChat(ctx *gin.Context) {
 	}
 }
 
-func (w *wsHandler) handleGroupChat(ctx *gin.Context) {
+func (w *wsHandler) HandleGroupChat(ctx *gin.Context) {
 	_, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
 		//handle
 	}
 }
-func (w *wsHandler) handlerGroupCreation(ctx *gin.Context) {
+func (w *wsHandler) HandlerGroupCreation(ctx *gin.Context) {
 	_, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
 		//handle
