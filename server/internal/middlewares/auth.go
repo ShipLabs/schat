@@ -18,7 +18,7 @@ const (
 	ErrCredentialsRequired = "credentials required"
 )
 
-var userRepo = repos.NewUserRepo(*db.DB)
+// var userRepo = repos.NewUserRepo(*db.DB) find how to instantiate the user repo and have it available
 
 func Auth(ctx *gin.Context) {
 	authT := ctx.GetHeader("Authorization")
@@ -36,19 +36,19 @@ func Auth(ctx *gin.Context) {
 	}
 
 	claims := jwt.RegisteredClaims{}
-	jwt.ParseWithClaims(jwtToken, &claims, func(token *jwt.Token) (interface{}, error) {
+	jwt.ParseWithClaims(jwtToken, &claims, func(token *jwt.Token) (any, error) {
 		return []byte(config.Configs.APP_SECRET), nil
 	})
 
 	userId := uuid.MustParse(claims.Subject)
-	user, err := userRepo.FindByID(userId)
+	user, err := repos.NewUserRepo(*db.DB).FindByID(userId)
 	if err != nil {
 		shared.ErrorResponse(ctx, http.StatusUnauthorized, err.Error())
 		ctx.Abort()
 		return
 	}
 
-	ctx.Set("userID", user.ID)
+	ctx.Set("userID", user.ID.String())
 	ctx.Next()
 }
 
