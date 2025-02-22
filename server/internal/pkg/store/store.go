@@ -47,6 +47,10 @@ func (s *wsStore) SaveConn(userID uuid.UUID, conn *websocket.Conn) {
 
 func (s *wsStore) DeleteConn(userID uuid.UUID) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	conn, ok := s.data[userID]
+	if ok {
+		conn.Close()
+	}
 	delete(s.data, userID)
-	s.mu.Unlock()
 }
