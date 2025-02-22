@@ -14,14 +14,9 @@ type MessageDto struct {
 	Content  string
 }
 
-type CreateChatDto struct {
-	MessageDto
-	ReceiverID uuid.UUID
-}
-
 type PrivateMessageDto struct {
 	MessageDto
-	ChatID uuid.UUID
+	ReceiverID uuid.UUID
 }
 
 type GroupMessageDto struct {
@@ -38,7 +33,6 @@ type chatService struct {
 }
 
 type ChatServiceInterface interface {
-	CreatePrivateChat(data CreateChatDto) error
 	SendPrivateMsg(data PrivateMessageDto) error
 	SendMsgToGroup(data GroupMessageDto) error
 }
@@ -65,8 +59,21 @@ var (
 	ErrChat404      = errors.New("chat not found")
 )
 
-func (c *chatService) CreatePrivateChat(data CreateChatDto) error {
-	_, err := c.userRepo.FindByID(data.ReceiverID)
+func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
+	chat, err := c.privateChatRepo.FindChat(data.ReceiverID, data.SenderID)
+	if err == nil {
+		pchat := models.PrivateMessage{
+			BaseMessage: models.BaseMessage{
+				Type:     data.Type,
+				SenderID: data.SenderID,
+				Content:  data.Content,
+			},
+			ChatID: chat.ID,
+		}
+		return c.privateMessageRepo.Create(nil, &pchat)
+	}
+
+	_, err = c.userRepo.FindByID(data.ReceiverID)
 	if err != nil {
 		return ErrUserNotFound
 	}
@@ -95,24 +102,9 @@ func (c *chatService) CreatePrivateChat(data CreateChatDto) error {
 		return ErrCreatingChat
 	}
 
+	tx.Commit()
+
 	return nil
-}
-
-func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
-	_, err := c.privateChatRepo.FindByID(data.ChatID)
-	if err != nil {
-		return ErrChat404
-	}
-
-	pchat := models.PrivateMessage{
-		ChatID: data.ChatID,
-		BaseMessage: models.BaseMessage{
-			Type:     data.Type,
-			SenderID: data.SenderID,
-			Content:  data.Content,
-		},
-	}
-	return c.privateMessageRepo.Create(nil, &pchat)
 }
 
 func (c *chatService) SendMsgToGroup(data GroupMessageDto) error {
