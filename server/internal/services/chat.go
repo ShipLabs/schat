@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"log"
 	"shiplabs/schat/internal/models"
 	repos "shiplabs/schat/internal/repositories"
 
@@ -9,19 +10,19 @@ import (
 )
 
 type MessageDto struct {
-	SenderID uuid.UUID
-	Type     models.ValidMsgType
-	Content  string
+	SenderID string              `json:"sender_id"`
+	Type     models.ValidMsgType `json:"type"`
+	Content  string              `json:"content"`
 }
 
 type PrivateMessageDto struct {
 	MessageDto
-	ReceiverID uuid.UUID
+	ReceiverID string `json:"receiver_id"`
 }
 
 type GroupMessageDto struct {
 	MessageDto
-	GroupID uuid.UUID
+	GroupID string `json:"group_id"`
 }
 
 type chatService struct {
@@ -60,12 +61,13 @@ var (
 )
 
 func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
-	chat, err := c.privateChatRepo.FindChat(data.ReceiverID, data.SenderID)
+	senderUUID, receiverUUID := uuid.MustParse(data.SenderID), uuid.MustParse(data.ReceiverID)
+	chat, err := c.privateChatRepo.FindChat(receiverUUID, senderUUID)
 	if err == nil {
 		pchat := models.PrivateMessage{
 			BaseMessage: models.BaseMessage{
 				Type:     data.Type,
-				SenderID: data.SenderID,
+				SenderID: senderUUID,
 				Content:  data.Content,
 			},
 			ChatID: chat.ID,
@@ -73,19 +75,19 @@ func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
 		return c.privateMessageRepo.Create(nil, &pchat)
 	}
 
-	_, err = c.userRepo.FindByID(data.ReceiverID)
+	_, err = c.userRepo.FindByID(receiverUUID)
 	if err != nil {
 		return ErrUserNotFound
 	}
 
 	privateChat := &models.PrivateChat{
-		FirstMemberID:  data.SenderID,
-		SecondMemberID: data.ReceiverID,
+		FirstMemberID:  senderUUID,
+		SecondMemberID: receiverUUID,
 	}
 
-	tx := c.privateChatRepo.BeginDBTx()
-	if err := c.privateChatRepo.CreatePrivateChat(tx, privateChat); err != nil {
-		tx.Rollback()
+	// tx := c.privateChatRepo.BeginDBTx()
+	if err := c.privateChatRepo.CreatePrivateChat(nil, privateChat); err != nil {
+		// tx.Rollback()
 		return ErrCreatingChat
 	}
 
@@ -93,22 +95,24 @@ func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
 		ChatID: privateChat.ID,
 		BaseMessage: models.BaseMessage{
 			Type:     data.Type,
-			SenderID: data.SenderID,
+			SenderID: senderUUID,
 			Content:  data.Content,
 		},
 	}
-	if err := c.privateMessageRepo.Create(tx, privateMessage); err != nil {
-		tx.Rollback()
+	if err := c.privateMessageRepo.Create(nil, privateMessage); err != nil {
+		log.Println(err)
+		// tx.Rollback()
 		return ErrCreatingChat
 	}
 
-	tx.Commit()
+	// tx.Commit()
 
 	return nil
 }
 
 func (c *chatService) SendMsgToGroup(data GroupMessageDto) error {
-	_, err := c.groupRepo.FindByID(data.GroupID)
+	senderUUID, groupUUID := uuid.MustParse(data.SenderID), uuid.MustParse(data.GroupID)
+	_, err := c.groupRepo.FindByID(groupUUID)
 	if err != nil {
 		return err
 	}
@@ -116,9 +120,9 @@ func (c *chatService) SendMsgToGroup(data GroupMessageDto) error {
 	msg := &models.GroupMessage{
 		BaseMessage: models.BaseMessage{
 			Type:     data.Type,
-			SenderID: data.SenderID,
+			SenderID: senderUUID,
 		},
-		GroupID: data.GroupID,
+		GroupID: groupUUID,
 	}
 
 	return c.groupMsgRepo.Create(msg)

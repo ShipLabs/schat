@@ -29,6 +29,9 @@ func (p *privateChatRepo) BeginDBTx() *gorm.DB {
 }
 
 func (p *privateChatRepo) CreatePrivateChat(txn *gorm.DB, chat *models.PrivateChat) error {
+	if txn == nil {
+		return p.DB.Create(chat).Error
+	}
 	return txn.Create(chat).Error
 }
 
