@@ -44,17 +44,6 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (w *wsHandler) handleResponse(conn *websocket.Conn, code int, msg, data string) {
-	resp := WSResponse{
-		StatusCode:   code,
-		ErrorMessage: msg,
-		Data:         data,
-	}
-	if err := conn.WriteJSON(&resp); err != nil {
-		log.Println(err)
-	}
-}
-
 func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
 	userID := uuid.MustParse(ctx.GetString("userID"))
 	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
@@ -69,25 +58,18 @@ func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
 		eConn = conn
 	}
 
-	var message services.PrivateMessageDto
-	if err := eConn.ReadJSON(&message); err != nil {
-		//check unepected connection closure error
-		log.Println(err)
-		w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
-	}
+	defer w.closeConn(conn, userID)
 
-	if err := w.privateChatService.SendPrivateMsg(message); err != nil {
-		log.Println(err)
-		w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
-	}
+	for {
+		var message services.PrivateMessageDto
+		if err := eConn.ReadJSON(&message); err != nil {
+			//TOD: check unepected connection closure error
+			log.Println(err)
+			w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
+		}
 
-	rconn, err := w.store.GetConn(message.ReceiverID)
-	if err != nil {
-		log.Println("receiver is not online")
-		return
+		go w.handlerIncomingMsg(&message, conn)
 	}
-
-	w.handleResponse(rconn, http.StatusOK, "", message.Content)
 }
 
 func (w *wsHandler) HandleGroupChat(ctx *gin.Context) {
@@ -101,4 +83,44 @@ func (w *wsHandler) HandlerGroupCreation(ctx *gin.Context) {
 	if err != nil {
 		//handle
 	}
+}
+
+func (w *wsHandler) handlerIncomingMsg(message *services.PrivateMessageDto, senderConn *websocket.Conn) {
+	if err := w.privateChatService.SendPrivateMsg(*message); err != nil {
+		log.Println(err)
+		w.handleResponse(senderConn, http.StatusBadRequest, err.Error(), "")
+	}
+
+	rconn, err := w.store.GetConn(uuid.MustParse(message.ReceiverID))
+	if err != nil {
+		log.Println("receiver is not online")
+		return
+	}
+
+	w.handleResponse(rconn, http.StatusOK, "", message.Content)
+}
+
+func (w *wsHandler) handleResponse(conn *websocket.Conn, code int, msg, data string) {
+	resp := WSResponse{
+		StatusCode:   code,
+		ErrorMessage: msg,
+		Data:         data,
+	}
+
+	if conn == nil {
+		log.Println("error sending resp: ", resp)
+		return
+	}
+
+	if err := conn.WriteJSON(&resp); err != nil {
+		log.Println(err)
+	}
+}
+
+func (w *wsHandler) closeConn(conn *websocket.Conn, userID uuid.UUID) {
+	if err := conn.Close(); err != nil {
+		log.Println("failed to close connection for user with id", userID)
+	}
+	w.store.DeleteConn(userID)
+	log.Println("connection closed for user with id", userID)
 }
