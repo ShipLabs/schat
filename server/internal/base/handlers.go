@@ -7,5 +7,5 @@ func (b *base) WithAuthController() handlers.AuthHandlerInterface {
 }
 
 func (b *base) WithChatController() handlers.WsHandlerInterface {
-	return handlers.NewWebSocketHandler(b.wsStore, b.WithPrivateChatService())
+	return handlers.NewWebSocketHandler(b.wsStore, b.WithPrivateChatService(), b.WithGroupService())
 }
