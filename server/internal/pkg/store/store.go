@@ -33,6 +33,8 @@ func NewWsStore() ConnectionStoreInterface {
 }
 
 func (s *wsStore) GetConn(userID uuid.UUID) (*websocket.Conn, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	c, ok := s.data[userID]
 	if ok {
 		return c, nil

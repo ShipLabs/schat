@@ -19,5 +19,7 @@ func RoutesHandler(e *gin.Engine) {
 	v1.POST("/login", app.AuthH.Login)
 
 	authRequired.GET("/chat", app.ChatH.HandlePrivateChat)
-
+	authRequired.GET("/group/create", app.ChatH.GroupCreationHandler)
+	authRequired.GET("/group/message", app.ChatH.HandleGroupChat)
+	authRequired.GET("/group/manage", app.ChatH.HandleMembership)
 }

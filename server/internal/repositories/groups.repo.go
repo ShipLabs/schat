@@ -19,6 +19,7 @@ type GroupRepoInterface interface {
 	GetGroupMember(groupID, userID uuid.UUID) (models.GroupMember, error)
 	CreateGroupMembership(tx *gorm.DB, membership *[]models.GroupMember) error
 	RevokeMembership(groupID, userID uuid.UUID) error
+	GetGroupMembers(groupID uuid.UUID) ([]models.GroupMember, error)
 }
 
 func NewGroupRepo(db gorm.DB) GroupRepoInterface {
@@ -82,4 +83,10 @@ func (g *groupRepo) CreateGroupMembership(tx *gorm.DB, membership *[]models.Grou
 
 func (g *groupRepo) RevokeMembership(groupID, userID uuid.UUID) error {
 	return g.DB.Unscoped().Where("user_id=? AND group_id=?", userID, groupID).Delete(&models.GroupMember{}).Error
+}
+
+func (g *groupRepo) GetGroupMembers(groupID uuid.UUID) ([]models.GroupMember, error) {
+	var members []models.GroupMember
+	err := g.DB.Where("group_id=?", groupID).Find(&members).Error
+	return members, err
 }
