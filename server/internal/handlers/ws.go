@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	ErrHandShakeFail = errors.New("failed handshake, connection not established")
-	ErrInvalidGroup  = errors.New("invalid group")
+	ErrHandShakeFail   = errors.New("failed handshake, connection not established")
+	ErrInvalidGroup    = errors.New("invalid group")
+	ErrInvalidMemberID = errors.New("invalid member id")
 )
 
 type WSResponse struct {
@@ -88,7 +89,7 @@ func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
 		if err := conn.ReadJSON(&message); err != nil {
 			//TODO: check unepected connection closure error
 			log.Println(err)
-			w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
+			w.handleResponse(conn, http.StatusBadRequest, err, "")
 		}
 
 		go w.handlerIncomingPrivateMsg(&message, conn)
@@ -109,7 +110,7 @@ func (w *wsHandler) HandleGroupChat(ctx *gin.Context) {
 		if err := conn.ReadJSON(&message); err != nil {
 			//TOD: check unepected connection closure error
 			log.Println(err)
-			w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
+			w.handleResponse(conn, http.StatusBadRequest, err, "")
 		}
 
 		go w.handleGroupMessage(&message, conn)
@@ -130,7 +131,7 @@ func (w *wsHandler) GroupCreationHandler(ctx *gin.Context) {
 		if err := conn.ReadJSON(&message); err != nil {
 			//TOD: check unepected connection closure error
 			log.Println(err)
-			w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
+			w.handleResponse(conn, http.StatusBadRequest, err, "")
 		}
 
 		go w.handleGroupCreation(userID, &message, conn)
@@ -155,7 +156,7 @@ func (w *wsHandler) HandleMembership(ctx *gin.Context) {
 		if err := conn.ReadJSON(&message); err != nil {
 			//TOD: check unepected connection closure error
 			log.Println(err)
-			w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
+			w.handleResponse(conn, http.StatusBadRequest, err, "")
 		}
 
 		go w.handleGroupMemberShip(userID, groupID, &message, conn)
@@ -165,12 +166,12 @@ func (w *wsHandler) handleGroupMemberShip(userID, groupID uuid.UUID, data *servi
 	memberID, err := uuid.Parse(data.MemberID)
 	if err != nil {
 		log.Println(err)
-		w.handleResponse(createrConn, http.StatusBadRequest, "invalid member id", "")
+		w.handleResponse(createrConn, http.StatusBadRequest, ErrInvalidMemberID, "")
 		return
 	}
 	if err := w.groupService.HandleMembership(groupID, userID, memberID, data.Action); err != nil {
 		log.Println(err)
-		w.handleResponse(createrConn, http.StatusBadRequest, "invalid member id", "")
+		w.handleResponse(createrConn, http.StatusBadRequest, err, "")
 		return
 	}
 
@@ -178,26 +179,23 @@ func (w *wsHandler) handleGroupMemberShip(userID, groupID uuid.UUID, data *servi
 	if err != nil {
 		log.Println(err)
 		//group has been created but members could not be fetched for notification, how to best handle???
-		w.handleResponse(createrConn, http.StatusBadRequest, err.Error(), "")
+		w.handleResponse(createrConn, http.StatusBadRequest, err, "")
 		return
 	}
 
 	var wg sync.WaitGroup
 	for _, member := range members {
 		wg.Add(1)
-		go w.groupMembershipNotification(member.UserID, data, &wg)
+		go w.groupMembershipNotification(member.UserID, data)
 	}
-
-	wg.Wait() //any need for the wg????
 }
 
 func (w *wsHandler) handleGroupCreation(userID uuid.UUID, data *services.CreateGroupDto, createrConn *websocket.Conn) {
 	if err := w.groupService.CreateGroup(userID, *data); err != nil {
 		log.Println(err)
-		w.handleResponse(createrConn, http.StatusBadRequest, err.Error(), "")
+		w.handleResponse(createrConn, http.StatusBadRequest, err, "")
 	}
 
-	var wg sync.WaitGroup
 	for _, memberID := range data.Members {
 		//handle this better - find a way
 		memberUUID, err := uuid.Parse(memberID)
@@ -205,62 +203,50 @@ func (w *wsHandler) handleGroupCreation(userID uuid.UUID, data *services.CreateG
 			log.Println("invalid member UUID:", memberID)
 			continue
 		}
-		wg.Add(1)
-		go w.groupCreationNotification(memberUUID, data, &wg)
+		go w.groupCreationNotification(memberUUID, data)
 	}
-
-	wg.Wait() //any need for the wg????
 }
 
 func (w *wsHandler) handleGroupMessage(data *services.GroupMessageDto, senderConn *websocket.Conn) {
 	groupUUID, err := uuid.Parse(data.GroupID)
 	if err != nil {
 		log.Println(err)
-		w.handleResponse(senderConn, http.StatusBadRequest, err.Error(), "")
+		w.handleResponse(senderConn, http.StatusBadRequest, err, "")
 		return
 	}
 	if err := w.chatService.SendMsgToGroup(*data); err != nil {
 		log.Println(err)
-		w.handleResponse(senderConn, http.StatusBadRequest, err.Error(), "")
+		w.handleResponse(senderConn, http.StatusBadRequest, err, "")
 		return
 	}
 	members, err := w.groupService.GetGroupMembers(groupUUID)
 	if err != nil {
 		log.Println(err)
-		w.handleResponse(senderConn, http.StatusBadRequest, err.Error(), "")
+		w.handleResponse(senderConn, http.StatusBadRequest, err, "")
 		return
 	}
 
-	var wg sync.WaitGroup
 	for _, member := range members {
-		wg.Add(1)
-		go w.groupMessageNotification(member.UserID, data, &wg)
+		go w.groupMessageNotification(member.UserID, data)
 	}
-
-	wg.Wait() //any need for the wg????
-
 }
 
-func (w *wsHandler) groupMessageNotification(userID uuid.UUID, data *services.GroupMessageDto, wg *sync.WaitGroup) {
+func (w *wsHandler) groupMessageNotification(userID uuid.UUID, data *services.GroupMessageDto) {
 	conn, err := w.store.GetConn(userID)
 	if err != nil {
 		log.Println("not online")
-		wg.Done()
 		return
 	}
-
-	w.handleResponse(conn, http.StatusOK, "", data.Content)
-	wg.Done()
+	w.handleResponse(conn, http.StatusOK, nil, data.Content)
 }
 
-func (w *wsHandler) groupMembershipNotification(userID uuid.UUID, data *services.GroupMembershipDto, wg *sync.WaitGroup) {
+func (w *wsHandler) groupMembershipNotification(userID uuid.UUID, data *services.GroupMembershipDto) {
 	conn, err := w.store.GetConn(userID)
 	if err != nil {
 		log.Println("not online")
-		wg.Done()
+
 		return
 	}
-
 	var action string
 	if data.Action == services.Add {
 		action += "ed"
@@ -268,27 +254,22 @@ func (w *wsHandler) groupMembershipNotification(userID uuid.UUID, data *services
 		action += "d"
 	}
 
-	w.handleResponse(conn, http.StatusOK, "", data.MemberID+" has been "+action)
-	wg.Done()
+	w.handleResponse(conn, http.StatusOK, nil, data.MemberID+" has been "+action)
 }
 
-func (w *wsHandler) groupCreationNotification(userID uuid.UUID, data *services.CreateGroupDto, wg *sync.WaitGroup) {
+func (w *wsHandler) groupCreationNotification(userID uuid.UUID, data *services.CreateGroupDto) {
 	conn, err := w.store.GetConn(userID)
 	if err != nil {
 		log.Println("not online")
-		wg.Done()
 		return
 	}
-
 	msg := "you have been added to "
-	w.handleResponse(conn, http.StatusOK, "", msg+data.GroupName)
-	wg.Done()
+	w.handleResponse(conn, http.StatusOK, nil, msg+data.GroupName)
 }
 
 func (w *wsHandler) handlerIncomingPrivateMsg(message *services.PrivateMessageDto, senderConn *websocket.Conn) {
 	if err := w.chatService.SendPrivateMsg(*message); err != nil {
-		log.Println(err)
-		w.handleResponse(senderConn, http.StatusBadRequest, err.Error(), "")
+		w.handleResponse(senderConn, http.StatusBadRequest, err, "")
 	}
 
 	rconn, err := w.store.GetConn(uuid.MustParse(message.ReceiverID))
@@ -297,21 +278,22 @@ func (w *wsHandler) handlerIncomingPrivateMsg(message *services.PrivateMessageDt
 		return
 	}
 
-	w.handleResponse(rconn, http.StatusOK, "", message.Content)
+	w.handleResponse(rconn, http.StatusOK, nil, message.Content)
 }
 
-func (w *wsHandler) handleResponse(conn *websocket.Conn, code int, msg, data string) {
+func (w *wsHandler) handleResponse(conn *websocket.Conn, code int, err error, data string) {
+	if err != nil {
+		log.Println(err.Error())
+	}
 	resp := WSResponse{
 		StatusCode:   code,
-		ErrorMessage: msg,
+		ErrorMessage: err.Error(),
 		Data:         data,
 	}
-
 	if conn == nil {
 		log.Println("error sending resp: ", resp)
 		return
 	}
-
 	if err := conn.WriteJSON(&resp); err != nil {
 		log.Println(err)
 	}
