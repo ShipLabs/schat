@@ -11,6 +11,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var (
+	ErrHandShakeFail = errors.New("failed handshake, connection not established")
+)
+
+
 type WSResponse struct {
 	StatusCode   int    `json:"status_code"`
 	ErrorMessage string `json:"error_msg"`
@@ -23,6 +28,7 @@ type wsHandler struct {
 }
 
 type WsHandlerInterface interface {
+	Connect(userID uuid.UUID, ctx *gin.Context) (*websocket.Conn, error)
 	HandlePrivateChat(ctx *gin.Context)
 	HandleGroupChat(ctx *gin.Context)
 	HandlerGroupCreation(ctx *gin.Context)
@@ -44,21 +50,30 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
-	userID := uuid.MustParse(ctx.GetString("userID"))
+func (w *wsHandler) Connect(userID uuid.UUID, ctx *gin.Context) (*websocket.Conn, error) {
+	//TOD0: how do I manage connections better (at scale or not???)
+	eConn, err := w.store.GetConn(userID)
+	if err == nil {
+		return eConn, nil
+	}
 	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
 	if err != nil {
 		log.Println(err)
-		w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
+		return nil, ErrHandShakeFail
 	}
 
-	eConn, err := w.store.GetConn(userID)
+	w.store.SaveConn(userID, conn)
+
+	return conn, nil
+}
+
+func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
+	userID := uuid.MustParse(ctx.GetString("userID"))
+	conn, err := w.Connect(userID, ctx)
 	if err != nil {
-		w.store.SaveConn(userID, conn)
-		eConn = conn
+		return //how do I better handle error here?? send back http json seems best since ws conn has not been established
 	}
-
-	defer w.closeConn(conn, userID)
+	defer w.closeConn(conn, userID) //should I close the connection here???
 
 	for {
 		var message services.PrivateMessageDto
