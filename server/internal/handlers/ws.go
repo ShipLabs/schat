@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"shiplabs/schat/internal/pkg/store"
 	"shiplabs/schat/internal/services"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -15,7 +17,6 @@ var (
 	ErrHandShakeFail = errors.New("failed handshake, connection not established")
 )
 
-
 type WSResponse struct {
 	StatusCode   int    `json:"status_code"`
 	ErrorMessage string `json:"error_msg"`
@@ -25,22 +26,26 @@ type WSResponse struct {
 type wsHandler struct {
 	store              store.ConnectionStoreInterface
 	privateChatService services.ChatServiceInterface
+	groupService       services.GroupServiceInterface
 }
 
 type WsHandlerInterface interface {
 	Connect(userID uuid.UUID, ctx *gin.Context) (*websocket.Conn, error)
 	HandlePrivateChat(ctx *gin.Context)
-	HandleGroupChat(ctx *gin.Context)
-	HandlerGroupCreation(ctx *gin.Context)
+	GroupCreationHandler(ctx *gin.Context)
+	// HandleGroupChat(ctx *gin.Context)
+	// HandlerGroupCreation(ctx *gin.Context)
 }
 
 func NewWebSocketHandler(
 	store store.ConnectionStoreInterface,
 	pChatService services.ChatServiceInterface,
+	groupService services.GroupServiceInterface,
 ) WsHandlerInterface {
 	return &wsHandler{
 		store:              store,
 		privateChatService: pChatService,
+		groupService:       groupService,
 	}
 }
 
@@ -77,13 +82,13 @@ func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
 
 	for {
 		var message services.PrivateMessageDto
-		if err := eConn.ReadJSON(&message); err != nil {
-			//TOD: check unepected connection closure error
+		if err := conn.ReadJSON(&message); err != nil {
+			//TODO: check unepected connection closure error
 			log.Println(err)
 			w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
 		}
 
-		go w.handlerIncomingMsg(&message, conn)
+		go w.handlerIncomingPrivateMsg(&message, conn)
 	}
 }
 
@@ -93,14 +98,56 @@ func (w *wsHandler) HandleGroupChat(ctx *gin.Context) {
 		//handle
 	}
 }
-func (w *wsHandler) HandlerGroupCreation(ctx *gin.Context) {
-	_, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
+
+func (w *wsHandler) GroupCreationHandler(ctx *gin.Context) {
+	userID := uuid.MustParse(ctx.GetString("userID"))
+	conn, err := w.Connect(userID, ctx)
 	if err != nil {
-		//handle
+		return //how do I better handle error here?? send back http json seems best since ws conn has not been established
+	}
+	defer w.closeConn(conn, userID)
+
+	for {
+		var message services.CreateGroupDto
+		if err := conn.ReadJSON(&message); err != nil {
+			//TOD: check unepected connection closure error
+			log.Println(err)
+			w.handleResponse(conn, http.StatusBadRequest, err.Error(), "")
+		}
+
+		go w.handleGroupCreation(userID, &message, conn)
 	}
 }
 
-func (w *wsHandler) handlerIncomingMsg(message *services.PrivateMessageDto, senderConn *websocket.Conn) {
+func (w *wsHandler) handleGroupCreation(userID uuid.UUID, data *services.CreateGroupDto, createrConn *websocket.Conn) {
+	if err := w.groupService.CreateGroup(userID, *data); err != nil {
+		log.Println(err)
+		w.handleResponse(createrConn, http.StatusBadRequest, err.Error(), "")
+	}
+
+	var wg sync.WaitGroup
+	for _, memberID := range data.Members {
+		wg.Add(1)
+		go w.notifyOnlineUser(memberID, data, &wg)
+	}
+
+	wg.Wait()
+}
+
+func (w *wsHandler) notifyOnlineUser(userID uuid.UUID, data *services.CreateGroupDto, wg *sync.WaitGroup) {
+	conn, err := w.store.GetConn(userID)
+	if err != nil {
+		log.Println("not online")
+		wg.Done()
+		return
+	}
+
+	msg := "you have been added to "
+	w.handleResponse(conn, http.StatusOK, "", msg+data.GroupName)
+	wg.Done()
+}
+
+func (w *wsHandler) handlerIncomingPrivateMsg(message *services.PrivateMessageDto, senderConn *websocket.Conn) {
 	if err := w.privateChatService.SendPrivateMsg(*message); err != nil {
 		log.Println(err)
 		w.handleResponse(senderConn, http.StatusBadRequest, err.Error(), "")
