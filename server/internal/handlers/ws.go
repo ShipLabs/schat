@@ -7,7 +7,6 @@ import (
 	"shiplabs/schat/internal/pkg/store"
 	"shiplabs/schat/internal/services"
 	"shiplabs/schat/pkg/shared"
-	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -162,6 +161,7 @@ func (w *wsHandler) HandleMembership(ctx *gin.Context) {
 		go w.handleGroupMemberShip(userID, groupID, &message, conn)
 	}
 }
+
 func (w *wsHandler) handleGroupMemberShip(userID, groupID uuid.UUID, data *services.GroupMembershipDto, createrConn *websocket.Conn) {
 	memberID, err := uuid.Parse(data.MemberID)
 	if err != nil {
@@ -183,9 +183,7 @@ func (w *wsHandler) handleGroupMemberShip(userID, groupID uuid.UUID, data *servi
 		return
 	}
 
-	var wg sync.WaitGroup
 	for _, member := range members {
-		wg.Add(1)
 		go w.groupMembershipNotification(member.UserID, data)
 	}
 }
