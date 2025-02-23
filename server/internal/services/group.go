@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"log"
 	"shiplabs/schat/internal/models"
 	repos "shiplabs/schat/internal/repositories"
 
@@ -9,9 +10,21 @@ import (
 )
 
 type CreateGroupDto struct {
-	GroupName   string
-	Description string
-	Members     []uuid.UUID
+	GroupName   string   `json:"group_name"`
+	Description string   `json:"description"`
+	Members     []string `json:"members"`
+}
+
+type GroupMembershipAction string
+
+const (
+	Add    GroupMembershipAction = "add"
+	Remove GroupMembershipAction = "remove"
+)
+
+type GroupMembershipDto struct {
+	MemberID string                `json:"member_id"`
+	Action   GroupMembershipAction `json:"action"`
 }
 
 type groupService struct {
@@ -21,8 +34,8 @@ type groupService struct {
 
 type GroupServiceInterface interface {
 	CreateGroup(userID uuid.UUID, data CreateGroupDto) error
-	AddToGroup(groupID, adminID, newMemberID uuid.UUID) error
-	RemoveFromGroup(groupID, adminID, memberID uuid.UUID) error
+	GetGroupMembers(groupID uuid.UUID) ([]models.GroupMember, error)
+	HandleMembership(groupID, adminID, memberID uuid.UUID, action GroupMembershipAction) error
 }
 
 func NewGroupService(
@@ -61,7 +74,7 @@ func (g *groupService) CreateGroup(userID uuid.UUID, data CreateGroupDto) error 
 	return nil
 }
 
-func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersID []uuid.UUID) []models.GroupMember {
+func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersID []string) []models.GroupMember {
 	var members []models.GroupMember
 
 	admin := models.GroupMember{
@@ -73,8 +86,13 @@ func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersI
 
 	//should probably check if the users being added exist. but will research efficient ways to do that
 	for _, memberID := range membersID {
+		mUUID, err := uuid.Parse(memberID)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
 		member := models.GroupMember{
-			UserID:  memberID,
+			UserID:  mUUID,
 			GroupID: groupID,
 			Role:    models.Member,
 		}
@@ -84,7 +102,7 @@ func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersI
 	return members
 }
 
-func (g *groupService) AddToGroup(groupID, adminID, newMemberID uuid.UUID) error {
+func (g *groupService) addToGroup(groupID, adminID, newMemberID uuid.UUID) error {
 	_, err := g.userRepo.FindByID(newMemberID)
 	if err != nil {
 		return err
@@ -111,7 +129,22 @@ func (g *groupService) AddToGroup(groupID, adminID, newMemberID uuid.UUID) error
 	return nil
 }
 
-func (g *groupService) RemoveFromGroup(groupID, adminID, memberID uuid.UUID) error {
+func (g *groupService) GetGroupMembers(groupID uuid.UUID) ([]models.GroupMember, error) {
+	return g.groupRepo.GetGroupMembers(groupID)
+}
+
+func (g *groupService) HandleMembership(groupID, adminID, memberID uuid.UUID, action GroupMembershipAction) error {
+	switch action {
+	case Add:
+		return g.addToGroup(groupID, adminID, memberID)
+	case Remove:
+		return g.removeFromGroup(groupID, adminID, memberID)
+	default:
+		return errors.New("invalid action")
+	}
+}
+
+func (g *groupService) removeFromGroup(groupID, adminID, memberID uuid.UUID) error {
 	if g.isGroupAdmin(groupID, adminID) {
 		return g.groupRepo.RevokeMembership(groupID, memberID)
 	}
