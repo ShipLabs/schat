@@ -9,7 +9,6 @@ import (
 )
 
 type CreateGroupDto struct {
-	CreatorID   uuid.UUID
 	GroupName   string
 	Description string
 	Members     []uuid.UUID
@@ -21,7 +20,7 @@ type groupService struct {
 }
 
 type GroupServiceInterface interface {
-	CreateGroup(data CreateGroupDto) error
+	CreateGroup(userID uuid.UUID, data CreateGroupDto) error
 	AddToGroup(groupID, adminID, newMemberID uuid.UUID) error
 	RemoveFromGroup(groupID, adminID, memberID uuid.UUID) error
 }
@@ -40,10 +39,10 @@ var (
 	ErrNotAdmin = errors.New("user not group admin")
 )
 
-func (g *groupService) CreateGroup(data CreateGroupDto) error {
+func (g *groupService) CreateGroup(userID uuid.UUID, data CreateGroupDto) error {
 	tx := g.groupRepo.BeginDBTx()
 	group := models.Group{
-		CreatorID:   data.CreatorID,
+		CreatorID:   userID,
 		Name:        data.GroupName,
 		Description: &data.Description,
 	}
@@ -53,7 +52,7 @@ func (g *groupService) CreateGroup(data CreateGroupDto) error {
 		return err
 	}
 
-	members := g.buildMembershipSlice(group.ID, data.CreatorID, data.Members)
+	members := g.buildMembershipSlice(group.ID, userID, data.Members)
 	if err := g.groupRepo.CreateGroupMembership(tx, &members); err != nil {
 		tx.Rollback()
 		return err
@@ -72,6 +71,7 @@ func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersI
 	}
 	members = append(members, admin)
 
+	//should probably check if the users being added exist. but will research efficient ways to do that
 	for _, memberID := range membersID {
 		member := models.GroupMember{
 			UserID:  memberID,
