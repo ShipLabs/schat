@@ -63,7 +63,7 @@ func (g *groupRepo) GetUserGroups(userID uuid.UUID) ([]models.Group, error) {
 
 func (g *groupRepo) FindByID(groupID uuid.UUID) (models.Group, error) {
 	var group models.Group
-	err := g.DB.Where("id=?", groupID).First(group).Error
+	err := g.DB.Where("id=?", groupID).First(&group).Error
 	return group, err
 }
 

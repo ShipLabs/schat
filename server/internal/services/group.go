@@ -53,7 +53,7 @@ var (
 )
 
 func (g *groupService) CreateGroup(userID uuid.UUID, data CreateGroupDto) error {
-	tx := g.groupRepo.BeginDBTx()
+	// tx := g.groupRepo.BeginDBTx()
 	group := models.Group{
 		CreatorID:   userID,
 		Name:        data.GroupName,
@@ -61,16 +61,16 @@ func (g *groupService) CreateGroup(userID uuid.UUID, data CreateGroupDto) error 
 	}
 	//if group is not modified id will be (0000-0000-0000), watch out for that
 	if err := g.groupRepo.CreateGroup(&group); err != nil {
-		tx.Rollback()
+		// tx.Rollback()
 		return err
 	}
 
 	members := g.buildMembershipSlice(group.ID, userID, data.Members)
-	if err := g.groupRepo.CreateGroupMembership(tx, &members); err != nil {
-		tx.Rollback()
+	if err := g.groupRepo.CreateGroupMembership(nil, &members); err != nil {
+		// tx.Rollback()
 		return err
 	}
-
+	//tx.Commit()
 	return nil
 }
 
