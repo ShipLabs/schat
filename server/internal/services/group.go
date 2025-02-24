@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"log"
 	"shiplabs/schat/internal/models"
 	repos "shiplabs/schat/internal/repositories"
 
@@ -9,10 +10,21 @@ import (
 )
 
 type CreateGroupDto struct {
-	CreatorID   uuid.UUID
-	GroupName   string
-	Description string
-	Members     []uuid.UUID
+	GroupName   string   `json:"group_name"`
+	Description string   `json:"description"`
+	Members     []string `json:"members"`
+}
+
+type GroupMembershipAction string
+
+const (
+	Add    GroupMembershipAction = "add"
+	Remove GroupMembershipAction = "remove"
+)
+
+type GroupMembershipDto struct {
+	MemberID string                `json:"member_id"`
+	Action   GroupMembershipAction `json:"action"`
 }
 
 type groupService struct {
@@ -21,9 +33,9 @@ type groupService struct {
 }
 
 type GroupServiceInterface interface {
-	CreateGroup(data CreateGroupDto) error
-	AddToGroup(groupID, adminID, newMemberID uuid.UUID) error
-	RemoveFromGroup(groupID, adminID, memberID uuid.UUID) error
+	CreateGroup(userID uuid.UUID, data CreateGroupDto) error
+	GetGroupMembers(groupID uuid.UUID) ([]models.GroupMember, error)
+	HandleMembership(groupID, adminID, memberID uuid.UUID, action GroupMembershipAction) error
 }
 
 func NewGroupService(
@@ -40,29 +52,29 @@ var (
 	ErrNotAdmin = errors.New("user not group admin")
 )
 
-func (g *groupService) CreateGroup(data CreateGroupDto) error {
-	tx := g.groupRepo.BeginDBTx()
+func (g *groupService) CreateGroup(userID uuid.UUID, data CreateGroupDto) error {
+	// tx := g.groupRepo.BeginDBTx()
 	group := models.Group{
-		CreatorID:   data.CreatorID,
+		CreatorID:   userID,
 		Name:        data.GroupName,
 		Description: &data.Description,
 	}
 	//if group is not modified id will be (0000-0000-0000), watch out for that
 	if err := g.groupRepo.CreateGroup(&group); err != nil {
-		tx.Rollback()
+		// tx.Rollback()
 		return err
 	}
 
-	members := g.buildMembershipSlice(group.ID, data.CreatorID, data.Members)
-	if err := g.groupRepo.CreateGroupMembership(tx, &members); err != nil {
-		tx.Rollback()
+	members := g.buildMembershipSlice(group.ID, userID, data.Members)
+	if err := g.groupRepo.CreateGroupMembership(nil, &members); err != nil {
+		// tx.Rollback()
 		return err
 	}
-
+	//tx.Commit()
 	return nil
 }
 
-func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersID []uuid.UUID) []models.GroupMember {
+func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersID []string) []models.GroupMember {
 	var members []models.GroupMember
 
 	admin := models.GroupMember{
@@ -72,9 +84,15 @@ func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersI
 	}
 	members = append(members, admin)
 
+	//should probably check if the users being added exist. but will research efficient ways to do that
 	for _, memberID := range membersID {
+		mUUID, err := uuid.Parse(memberID)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
 		member := models.GroupMember{
-			UserID:  memberID,
+			UserID:  mUUID,
 			GroupID: groupID,
 			Role:    models.Member,
 		}
@@ -84,7 +102,7 @@ func (g *groupService) buildMembershipSlice(groupID, adminID uuid.UUID, membersI
 	return members
 }
 
-func (g *groupService) AddToGroup(groupID, adminID, newMemberID uuid.UUID) error {
+func (g *groupService) addToGroup(groupID, adminID, newMemberID uuid.UUID) error {
 	_, err := g.userRepo.FindByID(newMemberID)
 	if err != nil {
 		return err
@@ -111,7 +129,22 @@ func (g *groupService) AddToGroup(groupID, adminID, newMemberID uuid.UUID) error
 	return nil
 }
 
-func (g *groupService) RemoveFromGroup(groupID, adminID, memberID uuid.UUID) error {
+func (g *groupService) GetGroupMembers(groupID uuid.UUID) ([]models.GroupMember, error) {
+	return g.groupRepo.GetGroupMembers(groupID)
+}
+
+func (g *groupService) HandleMembership(groupID, adminID, memberID uuid.UUID, action GroupMembershipAction) error {
+	switch action {
+	case Add:
+		return g.addToGroup(groupID, adminID, memberID)
+	case Remove:
+		return g.removeFromGroup(groupID, adminID, memberID)
+	default:
+		return errors.New("invalid action")
+	}
+}
+
+func (g *groupService) removeFromGroup(groupID, adminID, memberID uuid.UUID) error {
 	if g.isGroupAdmin(groupID, adminID) {
 		return g.groupRepo.RevokeMembership(groupID, memberID)
 	}

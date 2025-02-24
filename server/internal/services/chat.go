@@ -10,9 +10,8 @@ import (
 )
 
 type MessageDto struct {
-	SenderID string              `json:"sender_id"`
-	Type     models.ValidMsgType `json:"type"`
-	Content  string              `json:"content"`
+	Type    models.ValidMsgType `json:"type"`
+	Content string              `json:"content"`
 }
 
 type PrivateMessageDto struct {
@@ -34,8 +33,8 @@ type chatService struct {
 }
 
 type ChatServiceInterface interface {
-	SendPrivateMsg(data PrivateMessageDto) error
-	SendMsgToGroup(data GroupMessageDto) error
+	SendPrivateMsg(userID uuid.UUID, data PrivateMessageDto) error
+	SendMsgToGroup(userID uuid.UUID, data GroupMessageDto) error
 }
 
 func NewChatService(
@@ -60,14 +59,14 @@ var (
 	ErrChat404      = errors.New("chat not found")
 )
 
-func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
-	senderUUID, receiverUUID := uuid.MustParse(data.SenderID), uuid.MustParse(data.ReceiverID)
-	chat, err := c.privateChatRepo.FindChat(receiverUUID, senderUUID)
+func (c *chatService) SendPrivateMsg(userID uuid.UUID, data PrivateMessageDto) error {
+	receiverUUID := uuid.MustParse(data.ReceiverID)
+	chat, err := c.privateChatRepo.FindChat(receiverUUID, userID)
 	if err == nil {
 		pchat := models.PrivateMessage{
 			BaseMessage: models.BaseMessage{
 				Type:     data.Type,
-				SenderID: senderUUID,
+				SenderID: userID,
 				Content:  data.Content,
 			},
 			ChatID: chat.ID,
@@ -81,7 +80,7 @@ func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
 	}
 
 	privateChat := &models.PrivateChat{
-		FirstMemberID:  senderUUID,
+		FirstMemberID:  userID,
 		SecondMemberID: receiverUUID,
 	}
 
@@ -95,7 +94,7 @@ func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
 		ChatID: privateChat.ID,
 		BaseMessage: models.BaseMessage{
 			Type:     data.Type,
-			SenderID: senderUUID,
+			SenderID: userID,
 			Content:  data.Content,
 		},
 	}
@@ -110,8 +109,8 @@ func (c *chatService) SendPrivateMsg(data PrivateMessageDto) error {
 	return nil
 }
 
-func (c *chatService) SendMsgToGroup(data GroupMessageDto) error {
-	senderUUID, groupUUID := uuid.MustParse(data.SenderID), uuid.MustParse(data.GroupID)
+func (c *chatService) SendMsgToGroup(userID uuid.UUID, data GroupMessageDto) error {
+	groupUUID := uuid.MustParse(data.GroupID)
 	_, err := c.groupRepo.FindByID(groupUUID)
 	if err != nil {
 		return err
@@ -120,7 +119,7 @@ func (c *chatService) SendMsgToGroup(data GroupMessageDto) error {
 	msg := &models.GroupMessage{
 		BaseMessage: models.BaseMessage{
 			Type:     data.Type,
-			SenderID: senderUUID,
+			SenderID: userID,
 		},
 		GroupID: groupUUID,
 	}

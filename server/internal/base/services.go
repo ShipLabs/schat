@@ -17,3 +17,10 @@ func (b *base) WithPrivateChatService() services.ChatServiceInterface {
 		b.WithPrivateMsgRepo(),
 	)
 }
+
+func (b *base) WithGroupService() services.GroupServiceInterface {
+	return services.NewGroupService(
+		b.WithUserRepo(),
+		b.WithGroupRepo(),
+	)
+}
