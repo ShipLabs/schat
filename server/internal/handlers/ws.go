@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -34,7 +33,7 @@ type wsHandler struct {
 }
 
 type WsHandlerInterface interface {
-	Connect(userID uuid.UUID, ctx *gin.Context) (*websocket.Conn, error)
+	EstablishConnection(ctx *gin.Context)
 	HandlePrivateChat(ctx *gin.Context)
 	GroupCreationHandler(ctx *gin.Context)
 	HandleGroupChat(ctx *gin.Context)
@@ -59,7 +58,15 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (w *wsHandler) Connect(userID uuid.UUID, ctx *gin.Context) (*websocket.Conn, error) {
+func (w *wsHandler) EstablishConnection(ctx *gin.Context) {
+	userID := uuid.MustParse(ctx.GetString("userID"))
+	_, err := w.connect(userID, ctx)
+	if err != nil {
+		shared.ErrorResponse(ctx, http.StatusBadRequest, "error establishing connection")
+	}
+}
+
+func (w *wsHandler) connect(userID uuid.UUID, ctx *gin.Context) (*websocket.Conn, error) {
 	//TOD0: how do I manage connections better (at scale or not???)
 	eConn, err := w.store.GetConn(userID)
 	if err == nil {
@@ -77,39 +84,8 @@ func (w *wsHandler) Connect(userID uuid.UUID, ctx *gin.Context) (*websocket.Conn
 }
 
 func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
-	w.handleWebSocket(ctx, parsePrivateMessage, func(msg interface{}, conn *websocket.Conn) {
-		w.handlerIncomingPrivateMsg(msg.(*services.PrivateMessageDto), conn)
-	})
-}
-
-func (w *wsHandler) HandleGroupChat(ctx *gin.Context) {
-	w.handleWebSocket(ctx, parseGroupMessage, func(msg interface{}, conn *websocket.Conn) {
-		w.handleGroupMessage(msg.(*services.GroupMessageDto), conn)
-	})
-}
-
-func (w *wsHandler) GroupCreationHandler(ctx *gin.Context) {
-	w.handleWebSocket(ctx, parseCreateGroup, func(msg interface{}, conn *websocket.Conn) {
-		userID := uuid.MustParse(ctx.GetString("userID"))
-		w.handleGroupCreation(userID, msg.(*services.CreateGroupDto), conn)
-	})
-}
-
-func (w *wsHandler) HandleMembership(ctx *gin.Context) {
-	groupID, err := uuid.Parse(ctx.Param("group_id"))
-	if err != nil {
-		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, "invalid group id")
-		return
-	}
-	w.handleWebSocket(ctx, parseGroupMembership, func(msg interface{}, conn *websocket.Conn) {
-		userID := uuid.MustParse(ctx.GetString("userID"))
-		w.handleGroupMemberShip(userID, groupID, msg.(*services.GroupMembershipDto), conn)
-	})
-}
-
-func (w *wsHandler) handleWebSocket(ctx *gin.Context, parseMessage func([]byte) (interface{}, error), process func(interface{}, *websocket.Conn)) {
 	userID := uuid.MustParse(ctx.GetString("userID"))
-	conn, err := w.Connect(userID, ctx)
+	conn, err := w.connect(userID, ctx)
 	if err != nil {
 		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -117,46 +93,82 @@ func (w *wsHandler) handleWebSocket(ctx *gin.Context, parseMessage func([]byte) 
 	defer w.closeConn(conn, userID)
 
 	for {
-		_, messageData, err := conn.ReadMessage()
-		if err != nil {
+		var message services.PrivateMessageDto
+		if err := conn.ReadJSON(&message); err != nil {
+			//TODO: check unepected connection closure error
 			log.Println(err)
 			w.handleResponse(conn, http.StatusBadRequest, err, "")
-			continue
 		}
 
-		message, err := parseMessage(messageData)
-		if err != nil {
-			log.Println("Failed to parse message:", err)
-			w.handleResponse(conn, http.StatusBadRequest, ErrInvalidMessageFormat, "")
-			continue
-		}
-
-		go process(message, conn)
+		go w.handlerIncomingPrivateMsg(&message, conn)
 	}
 }
 
-func parsePrivateMessage(data []byte) (interface{}, error) {
-	var msg services.PrivateMessageDto
-	err := json.Unmarshal(data, &msg)
-	return msg, err
+func (w *wsHandler) HandleGroupChat(ctx *gin.Context) {
+	userID := uuid.MustParse(ctx.GetString("userID"))
+	conn, err := w.connect(userID, ctx)
+	if err != nil {
+		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	defer w.closeConn(conn, userID)
+
+	for {
+		var message services.GroupMessageDto
+		if err := conn.ReadJSON(&message); err != nil {
+			//TOD: check unepected connection closure error
+			log.Println(err)
+			w.handleResponse(conn, http.StatusBadRequest, err, "")
+		}
+
+		go w.handleGroupMessage(&message, conn)
+	}
 }
 
-func parseGroupMessage(data []byte) (interface{}, error) {
-	var msg services.GroupMessageDto
-	err := json.Unmarshal(data, &msg)
-	return msg, err
+func (w *wsHandler) GroupCreationHandler(ctx *gin.Context) {
+	userID := uuid.MustParse(ctx.GetString("userID"))
+	conn, err := w.connect(userID, ctx)
+	if err != nil {
+		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	defer w.closeConn(conn, userID)
+
+	for {
+		var message services.CreateGroupDto
+		if err := conn.ReadJSON(&message); err != nil {
+			//TOD: check unepected connection closure error
+			log.Println(err)
+			w.handleResponse(conn, http.StatusBadRequest, err, "")
+		}
+
+		go w.handleGroupCreation(userID, &message, conn)
+	}
 }
 
-func parseCreateGroup(data []byte) (interface{}, error) {
-	var msg services.CreateGroupDto
-	err := json.Unmarshal(data, &msg)
-	return msg, err
-}
+func (w *wsHandler) HandleMembership(ctx *gin.Context) {
+	userID := uuid.MustParse(ctx.GetString("userID"))
+	groupID, err := uuid.Parse(ctx.Param("group_id"))
+	if err != nil {
+		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, "invalid group id")
+		return
+	}
+	conn, err := w.connect(userID, ctx)
+	if err != nil {
+		return
+	}
+	defer w.closeConn(conn, userID)
 
-func parseGroupMembership(data []byte) (interface{}, error) {
-	var msg services.GroupMembershipDto
-	err := json.Unmarshal(data, &msg)
-	return msg, err
+	for {
+		var message services.GroupMembershipDto
+		if err := conn.ReadJSON(&message); err != nil {
+			//TOD: check unepected connection closure error
+			log.Println(err)
+			w.handleResponse(conn, http.StatusBadRequest, err, "")
+		}
+
+		go w.handleGroupMemberShip(userID, groupID, &message, conn)
+	}
 }
 
 func (w *wsHandler) handleGroupMemberShip(userID, groupID uuid.UUID, data *services.GroupMembershipDto, createrConn *websocket.Conn) {
