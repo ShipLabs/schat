@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -14,9 +15,10 @@ import (
 )
 
 var (
-	ErrHandShakeFail   = errors.New("failed handshake, connection not established")
-	ErrInvalidGroup    = errors.New("invalid group")
-	ErrInvalidMemberID = errors.New("invalid member id")
+	ErrHandShakeFail        = errors.New("failed handshake, connection not established")
+	ErrInvalidGroup         = errors.New("invalid group")
+	ErrInvalidMemberID      = errors.New("invalid member id")
+	ErrInvalidMessageFormat = errors.New("invalid message format")
 )
 
 type WSResponse struct {
@@ -75,91 +77,86 @@ func (w *wsHandler) Connect(userID uuid.UUID, ctx *gin.Context) (*websocket.Conn
 }
 
 func (w *wsHandler) HandlePrivateChat(ctx *gin.Context) {
-	userID := uuid.MustParse(ctx.GetString("userID"))
-	conn, err := w.Connect(userID, ctx)
-	if err != nil {
-		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, err.Error())
-		return
-	}
-	defer w.closeConn(conn, userID)
-
-	for {
-		var message services.PrivateMessageDto
-		if err := conn.ReadJSON(&message); err != nil {
-			//TODO: check unepected connection closure error
-			log.Println(err)
-			w.handleResponse(conn, http.StatusBadRequest, err, "")
-		}
-
-		go w.handlerIncomingPrivateMsg(&message, conn)
-	}
+	w.handleWebSocket(ctx, parsePrivateMessage, func(msg interface{}, conn *websocket.Conn) {
+		w.handlerIncomingPrivateMsg(msg.(*services.PrivateMessageDto), conn)
+	})
 }
 
 func (w *wsHandler) HandleGroupChat(ctx *gin.Context) {
-	userID := uuid.MustParse(ctx.GetString("userID"))
-	conn, err := w.Connect(userID, ctx)
-	if err != nil {
-		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, err.Error())
-		return
-	}
-	defer w.closeConn(conn, userID)
-
-	for {
-		var message services.GroupMessageDto
-		if err := conn.ReadJSON(&message); err != nil {
-			//TOD: check unepected connection closure error
-			log.Println(err)
-			w.handleResponse(conn, http.StatusBadRequest, err, "")
-		}
-
-		go w.handleGroupMessage(&message, conn)
-	}
+	w.handleWebSocket(ctx, parseGroupMessage, func(msg interface{}, conn *websocket.Conn) {
+		w.handleGroupMessage(msg.(*services.GroupMessageDto), conn)
+	})
 }
 
 func (w *wsHandler) GroupCreationHandler(ctx *gin.Context) {
-	userID := uuid.MustParse(ctx.GetString("userID"))
-	conn, err := w.Connect(userID, ctx)
-	if err != nil {
-		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, err.Error())
-		return
-	}
-	defer w.closeConn(conn, userID)
-
-	for {
-		var message services.CreateGroupDto
-		if err := conn.ReadJSON(&message); err != nil {
-			//TOD: check unepected connection closure error
-			log.Println(err)
-			w.handleResponse(conn, http.StatusBadRequest, err, "")
-		}
-
-		go w.handleGroupCreation(userID, &message, conn)
-	}
+	w.handleWebSocket(ctx, parseCreateGroup, func(msg interface{}, conn *websocket.Conn) {
+		userID := uuid.MustParse(ctx.GetString("userID"))
+		w.handleGroupCreation(userID, msg.(*services.CreateGroupDto), conn)
+	})
 }
 
 func (w *wsHandler) HandleMembership(ctx *gin.Context) {
-	userID := uuid.MustParse(ctx.GetString("userID"))
 	groupID, err := uuid.Parse(ctx.Param("group_id"))
 	if err != nil {
 		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, "invalid group id")
 		return
 	}
+	w.handleWebSocket(ctx, parseGroupMembership, func(msg interface{}, conn *websocket.Conn) {
+		userID := uuid.MustParse(ctx.GetString("userID"))
+		w.handleGroupMemberShip(userID, groupID, msg.(*services.GroupMembershipDto), conn)
+	})
+}
+
+func (w *wsHandler) handleWebSocket(ctx *gin.Context, parseMessage func([]byte) (interface{}, error), process func(interface{}, *websocket.Conn)) {
+	userID := uuid.MustParse(ctx.GetString("userID"))
 	conn, err := w.Connect(userID, ctx)
 	if err != nil {
+		shared.ErrorResponse(ctx, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	defer w.closeConn(conn, userID)
 
 	for {
-		var message services.GroupMembershipDto
-		if err := conn.ReadJSON(&message); err != nil {
-			//TOD: check unepected connection closure error
+		_, messageData, err := conn.ReadMessage()
+		if err != nil {
 			log.Println(err)
 			w.handleResponse(conn, http.StatusBadRequest, err, "")
+			continue
 		}
 
-		go w.handleGroupMemberShip(userID, groupID, &message, conn)
+		message, err := parseMessage(messageData)
+		if err != nil {
+			log.Println("Failed to parse message:", err)
+			w.handleResponse(conn, http.StatusBadRequest, ErrInvalidMessageFormat, "")
+			continue
+		}
+
+		go process(message, conn)
 	}
+}
+
+func parsePrivateMessage(data []byte) (interface{}, error) {
+	var msg services.PrivateMessageDto
+	err := json.Unmarshal(data, &msg)
+	return msg, err
+}
+
+func parseGroupMessage(data []byte) (interface{}, error) {
+	var msg services.GroupMessageDto
+	err := json.Unmarshal(data, &msg)
+	return msg, err
+}
+
+func parseCreateGroup(data []byte) (interface{}, error) {
+	var msg services.CreateGroupDto
+	err := json.Unmarshal(data, &msg)
+	return msg, err
+}
+
+func parseGroupMembership(data []byte) (interface{}, error) {
+	var msg services.GroupMembershipDto
+	err := json.Unmarshal(data, &msg)
+	return msg, err
 }
 
 func (w *wsHandler) handleGroupMemberShip(userID, groupID uuid.UUID, data *services.GroupMembershipDto, createrConn *websocket.Conn) {
@@ -230,39 +227,24 @@ func (w *wsHandler) handleGroupMessage(data *services.GroupMessageDto, senderCon
 }
 
 func (w *wsHandler) groupMessageNotification(userID uuid.UUID, data *services.GroupMessageDto) {
-	conn, err := w.store.GetConn(userID)
-	if err != nil {
-		log.Println("not online")
-		return
-	}
-	w.handleResponse(conn, http.StatusOK, nil, data.Content)
+	w.transmit(userID, data.Content)
 }
 
 func (w *wsHandler) groupMembershipNotification(userID uuid.UUID, data *services.GroupMembershipDto) {
-	conn, err := w.store.GetConn(userID)
-	if err != nil {
-		log.Println("not online")
-
-		return
-	}
 	var action string
 	if data.Action == services.Add {
 		action += "ed"
 	} else {
 		action += "d"
 	}
+	msg := data.MemberID + " has been " + action
 
-	w.handleResponse(conn, http.StatusOK, nil, data.MemberID+" has been "+action)
+	w.transmit(userID, msg)
 }
 
 func (w *wsHandler) groupCreationNotification(userID uuid.UUID, data *services.CreateGroupDto) {
-	conn, err := w.store.GetConn(userID)
-	if err != nil {
-		log.Println("not online")
-		return
-	}
-	msg := "you have been added to "
-	w.handleResponse(conn, http.StatusOK, nil, msg+data.GroupName)
+	msg := "you have been added to " + data.GroupName
+	w.transmit(userID, msg)
 }
 
 func (w *wsHandler) handlerIncomingPrivateMsg(message *services.PrivateMessageDto, senderConn *websocket.Conn) {
@@ -270,13 +252,17 @@ func (w *wsHandler) handlerIncomingPrivateMsg(message *services.PrivateMessageDt
 		w.handleResponse(senderConn, http.StatusBadRequest, err, "")
 	}
 
-	rconn, err := w.store.GetConn(uuid.MustParse(message.ReceiverID))
+	w.transmit(uuid.MustParse(message.ReceiverID), message.Content)
+}
+
+func (w *wsHandler) transmit(userID uuid.UUID, content string) {
+	conn, err := w.store.GetConn(userID)
 	if err != nil {
 		log.Println("receiver is not online")
 		return
 	}
 
-	w.handleResponse(rconn, http.StatusOK, nil, message.Content)
+	w.handleResponse(conn, http.StatusOK, nil, content)
 }
 
 func (w *wsHandler) handleResponse(conn *websocket.Conn, code int, err error, data string) {
